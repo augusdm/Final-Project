@@ -1,6 +1,6 @@
 ---
 title: "NBA Draft: First-Round Prediction — Logistic Regression Baseline"
-author: "Group project"
+author: "Joe, Augustin, Arina, Nikhil, Alexa"
 date: "`r Sys.Date()`"
 output:
   html_document:
