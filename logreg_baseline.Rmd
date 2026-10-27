@@ -1,6 +1,6 @@
 ---
 title: "NBA Draft: First-Round Prediction — Logistic Regression Baseline"
-author: "Joe, Augustin, Alexa, Arina, Nikhil"
+author: "Group project"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -14,15 +14,35 @@ params:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+
+# ---- 1. Packages: install anything missing, then load ----------------------
+needed <- c("dplyr", "readr", "tidyr", "purrr", "stringr", "ggplot2", "knitr",
+            "httr", "rvest")                      # httr/rvest are for build_dataset.R
+missing_pkgs <- needed[!sapply(needed, requireNamespace, quietly = TRUE)]
+if (length(missing_pkgs)) install.packages(missing_pkgs, repos = "https://cloud.r-project.org")
 suppressPackageStartupMessages({
   library(dplyr); library(readr); library(tidyr); library(purrr); library(stringr); library(ggplot2); library(knitr)
 })
+
 # `params` only exists when knitting. Fall back to defaults when chunks are run
 # interactively (Run All), so the file works either way.
 if (!exists("params")) {
   params <- list(data = "data/players.csv", results_dir = "results", season_z = TRUE)
 }
 dir.create(params$results_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ---- 2. Dataset: build it if it isn't there --------------------------------
+# Knitting runs with the Rmd's folder as the working directory, so this works
+# for anyone who cloned the repo. First build downloads ~35 files (~5 min);
+# they are cached in data/raw/ so later rebuilds are fast.
+if (!file.exists(params$data)) {
+  if (!file.exists("build_dataset.R"))
+    stop("data/players.csv not found and build_dataset.R is missing. ",
+         "Make sure you are in the project folder (open Final-Project.Rproj).")
+  message("players.csv not found - building it from Barttorvik + Basketball-Reference...")
+  source("build_dataset.R")
+  build_dataset(start = 2010, end = 2025, out_dir = dirname(params$data))
+}
 ```
 
 ## Goal

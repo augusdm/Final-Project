@@ -1,0 +1,45 @@
+column,description
+pid,Barttorvik player id (join key)
+draft_year,"Draft class the row is labeled against (= final season year, or the real draft year if he sat out)"
+season_year,Year of the final college season used for the stats
+class_num,"Fr=1, So=2, Jr=3, Sr=4 (age proxy)"
+seasons_played,College seasons in the data (within downloaded range)
+transfer,1 if final-season school differs from previous-season school
+height_in,Listed height in inches
+height_vs_pos,Height minus the average height of players at the same position in the same season (inches)
+height_z_pos,"Same, in standard deviations"
+position / pos_*,"guard / wing / big, mapped from Barttorvik role; pos_guard is the reference category"
+Rec_Rank,Barttorvik recruiting rank (raw; 0/NA = unranked)
+recruit_rank,Rec_Rank with unranked set to (max rank + 1)
+unranked,1 if no recruiting rank
+recruit_tier,top10 / top30 / top100 / ranked100plus / unranked
+"GP, Min_per, mpg, mp_total","Games, % of team minutes, minutes per game, total minutes"
+usg,Usage rate
+ORtg,Offensive rating (points produced per 100 possessions)
+"eFG, TS_per","Effective FG%, true shooting %"
+pts_per40,Points per 40 minutes
+"FT_per, FTA, ftr","FT%, FT attempts, FT rate (FTA/FGA)"
+"TPA, TPA_rate, TPA_per40","3PA total, share of FGA that are 3s, 3PA per 40"
+TP_per,Raw 3P%
+TP_per_shrunk,3P% shrunk toward 33% with 50 pseudo-attempts (use this instead of raw)
+TP_per_min30,"3P% only when TPA >= 30, else NA"
+"AST_per, TO_per, ast_tov, ast_per40","Assist rate, turnover rate, A/TO, assists per 40"
+"ORB_per, DRB_per, treb_per40","Rebounding rates, rebounds per 40"
+"stl_per, blk_per, stocks_per","Steal %, block %, their sum"
+"rim_rate, rim_pct, mid_pct","Share of FGA at rim, rim FG%, midrange FG%"
+"dunksmade, dunks_per40",Dunks (athleticism proxy)
+pfr,Personal foul rate
+"bpm, obpm, dbpm",Box plus-minus and its offensive/defensive parts
+"gbpm, ogbpm, dgbpm",Game-based BPM (Barttorvik's play-by-play version)
+"porpag, dporpag","Points over replacement per adjusted game, offensive / defensive (value metrics)"
+adjoe,Player adjusted offensive efficiency
+"drtg, adrtg, stops","Defensive rating, adjusted defensive rating, stops (team-dependent)"
+"team_adjoe, team_adjde, team_adj_em",Team adjusted O / D efficiency and margin (competition level)
+"team_barthag, team_sos, team_wab","Team win probability vs average, strength of schedule, wins above bubble"
+"prev_*, delta_*",Previous-season value and change (NA for one-season players)
+career_*,All-seasons totals/percentages (FT and 3P)
+"drafted, first_round, pick_number","Labels: drafted anywhere, picked 1-30, pick number (blank = undrafted; keep numeric for modeling)"
+"draft_status, pick_label","Readable versions: 'Round 1' / 'Round 2' / 'Undrafted', and the pick number or 'Undrafted'"
+nba_team,"Drafting team, or 'Undrafted'"
+bt_pick,"Barttorvik's own pick column (cross-check only, do not use as a feature)"
+draft_class_mismatch,1 if B-Ref draft year != final season year (sat out)

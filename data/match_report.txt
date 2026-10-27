@@ -1,0 +1,91 @@
+Draft years 2010-2025, excluding 2020, 2021
+Total picks: 956   college picks: 765   college 1st-rounders: 403
+
+Column-mapping sanity check (Barttorvik):
+  zion williamson 2019: team=Duke yr=Fr ht=6-7 pick=1 bpm=16.4614 role=Wing F -> OK
+  anthony edwards 2020: team=Georgia yr=Fr ht=6-5 pick=1 bpm=3.96519 role=Wing G -> OK
+  paolo banchero 2022: team=Duke yr=Fr ht=6-10 pick=1 bpm=7.03346 role=Wing F -> OK
+
+Match rate by group:
+  college picks         760/765  =  99.3%
+  college 1st round     402/403  =  99.8%
+
+Match method counts:
+
+btpick+lastname/school        lastname+school         name+prev_year              name+year 
+                     5                     11                      4                    727 
+      name+year+school            non_college              unmatched 
+                    13                    191                      5 
+
+Picks where B-Ref pick != Barttorvik 'pick' column: 1
+   2022 JD Davison: bref=53 bt=54
+
+Label verification:
+  matched college 1st-rounders in kept years: 353 ; rows with first_round=1 in players.csv: 353 -> OK
+  rows outside draft years 2010-2025: 0 (must be 0)
+  rows in excluded years (2020,2021): 0 (must be 0)
+  john wall          2010: first_round=1 pick=1 -> OK
+  kyrie irving       2011: first_round=1 pick=1 -> OK
+  anthony davis      2012: first_round=1 pick=1 -> OK
+  anthony bennett    2013: first_round=1 pick=1 -> OK
+  andrew wiggins     2014: first_round=1 pick=1 -> OK
+  karlanthony towns  2015: first_round=1 pick=1 -> OK
+  ben simmons        2016: first_round=1 pick=1 -> OK
+  markelle fultz     2017: first_round=1 pick=1 -> OK
+  deandre ayton      2018: first_round=1 pick=1 -> OK
+  zion williamson    2019: first_round=1 pick=1 -> OK
+  paolo banchero     2022: first_round=1 pick=1 -> OK
+  cooper flagg       2025: first_round=1 pick=1 -> OK
+  blake griffin (2009 class) rows in players.csv: 0 (must be 0)
+
+Feature coverage in players.csv:
+  team ratings joined: 100.0% of rows
+  position mapped:     100.0% of rows  (roles seen: Wing G, Combo G, Scoring PG, PF/C, C, Wing F, Stretch 4, Pure PG)
+  recruiting rank:     35.7% ranked (27 first-rounders unranked)
+  transfers:           1981 rows flagged
+
+players.csv: 12095 rows, 353 first-rounders, 661 drafted, 11434 undrafted
+
+Rows per draft year:
+ draft_year rows first_rounders drafted
+       2010  858             29      53
+       2011  895             24      46
+       2012  822             29      51
+       2013  846             23      46
+       2014  868             24      46
+       2015  877             26      46
+       2016  875             22      44
+       2017  854             27      50
+       2018  906             27      50
+       2019  877             26      51
+       2022  758             25      43
+       2023  795             25      46
+       2024  778             22      43
+       2025 1086             24      46
+
+Picks needing attention (also listed in manual_matches.csv):
+  VERIFIED   2010 # 4 B-Ref 'Wesley Johnson' (Syracuse) = Barttorvik 'Wes Johnson' (Syracuse, Jr, pick 4)
+  VERIFIED   2011 #37 B-Ref 'Trey Thompkins' (Georgia) = Barttorvik 'Howard Thompkins III' (Georgia, Jr, bt pick none)  <- eyeball this one
+  VERIFIED   2012 #15 B-Ref 'Maurice Harkless' (St. John's) = Barttorvik 'Moe Harkless' (St. John's, Fr, bt pick 15)  <- eyeball this one
+  VERIFIED   2012 #31 B-Ref 'Jeff Taylor' (Vanderbilt) = Barttorvik 'Jeffery Taylor' (Vanderbilt, Sr, bt pick 31)  <- eyeball this one
+  PREV_YEAR  2013 #35 Glen Rice Jr. (Georgia Tech) matched to 2012 season (sat out?)
+  UNMATCHED  2013 #43 Ricky Ledo (Providence)
+  PREV_YEAR  2014 #26 P.J. Hairston (UNC) matched to 2013 season (sat out?)
+  VERIFIED   2014 #56 B-Ref 'Devyn Marble' (Iowa) = Barttorvik 'Roy Devyn Marble' (Iowa, Sr, bt pick 56)  <- eyeball this one
+  VERIFIED   2015 #43 B-Ref 'Joe Young' (Oregon) = Barttorvik 'Joseph Young' (Oregon, Sr, pick 43)
+  VERIFIED   2016 #54 B-Ref 'Kay Felder' (Oakland) = Barttorvik 'Kahlil Felder' (Oakland, Jr, bt pick 54)  <- eyeball this one
+  VERIFIED   2017 #14 B-Ref 'Bam Adebayo' (Kentucky) = Barttorvik 'Edrice Adebayo' (Kentucky, Fr, pick 14)
+  VERIFIED   2017 #33 B-Ref 'Wes Iwundu' (Kansas State) = Barttorvik 'Wesley Iwundu' (Kansas St., Sr, bt pick 33)  <- eyeball this one
+  VERIFIED   2018 # 6 B-Ref 'Mo Bamba' (Texas) = Barttorvik 'Mohamed Bamba' (Texas, Fr, bt pick 6)  <- eyeball this one
+  PREV_YEAR  2018 #46 De'Anthony Melton (USC) matched to 2017 season (sat out?)
+  VERIFIED   2018 #47 B-Ref 'Svi Mykhailiuk' (Kansas) = Barttorvik 'Sviatoslav Mykhailiuk' (Kansas, Sr, pick 47)
+  UNMATCHED  2018 #52 Vince Edwards (Purdue) | suggestions: Vincent Edwards pid=47002; Carsen Edwards pid=47325
+  VERIFIED   2019 #31 B-Ref 'Nic Claxton' (Georgia) = Barttorvik 'Nicolas Claxton' (Georgia, So, bt pick 31)  <- eyeball this one
+  UNMATCHED  2019 #59 Dewan Hernandez (Miami (FL))
+  UNMATCHED  2020 #55 Jay Scrubb (John A. Logan College)
+  VERIFIED   2021 #26 B-Ref 'Bones Hyland' (VCU) = Barttorvik 'Nah'Shon Hyland' (VCU, So, bt pick 26)  <- eyeball this one
+  VERIFIED   2021 #27 B-Ref 'Cam Thomas' (LSU) = Barttorvik 'Cameron Thomas' (LSU, Fr, bt pick 27)  <- eyeball this one
+  PREV_YEAR  2021 #50 Filip Petrušev (Gonzaga) matched to 2020 season (sat out?)
+  UNMATCHED  2022 # 7 Shaedon Sharpe (Kentucky)
+  VERIFIED   2023 #45 B-Ref 'GG Jackson II' (South Carolina) = Barttorvik 'Gregory Jackson' (South Carolina, Fr, bt pick 45)  <- eyeball this one
+  VERIFIED   2024 #14 B-Ref 'Bub Carrington' (Pitt) = Barttorvik 'Carlton Carrington' (Pittsburgh, Fr, pick 14)
