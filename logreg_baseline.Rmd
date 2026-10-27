@@ -1,0 +1,299 @@
+---
+title: "NBA Draft: First-Round Prediction — Logistic Regression Baseline"
+author: "Group project"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+params:
+  data: "data/players.csv"
+  results_dir: "results"
+  season_z: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+suppressPackageStartupMessages({
+  library(dplyr); library(readr); library(tidyr); library(purrr); library(stringr); library(ggplot2); library(knitr)
+})
+# `params` only exists when knitting. Fall back to defaults when chunks are run
+# interactively (Run All), so the file works either way.
+if (!exists("params")) {
+  params <- list(data = "data/players.csv", results_dir = "results", season_z = TRUE)
+}
+dir.create(params$results_dir, recursive = TRUE, showWarnings = FALSE)
+```
+
+## Goal
+
+Predict whether a college player is taken in the **first round** from his final
+college season (plus simple multi-season features). This is the baseline the
+other four models (KNN, ANN, random forest, XGBoost) are compared against.
+
+Evaluation is **leave-one-draft-out**: train on every other draft class, predict
+the held-out class. Never random row splits — players from the same class leak.
+
+## Data
+
+```{r load}
+df <- read_csv(params$data, show_col_types = FALSE)
+
+# Core feature set agreed by the team (see data/data_dictionary.csv for definitions).
+# Dummies / flags listed in `binary_features` are not z-scored.
+features <- c(
+  # profile
+  "class_num",            # Fr=1 ... Sr=4 (age proxy; younger = more valuable)
+  "height_vs_pos",        # height relative to position average (swap for "height_in" to compare)
+  "pos_wing", "pos_big",  # position dummies, guard = reference
+  "recruit_rank", "unranked",
+  "transfer",
+  # role / load
+  "mpg", "usg",
+  # efficiency and shooting
+  "TS_per", "FT_per", "TPA_rate", "TP_per_shrunk", "ftr", "pts_per40",
+  # playmaking / rebounding / defense
+  "ast_tov", "ORB_per", "DRB_per", "stl_per", "blk_per",
+  # all-in-one impact
+  "obpm", "dbpm",
+  # competition level
+  "team_adj_em"
+)
+binary_features <- c("pos_wing", "pos_big", "unranked", "transfer", "power_conf")
+features <- intersect(features, names(df))
+
+cat("Rows:", nrow(df), "  first-rounders:", sum(df$first_round),
+    "  drafts:", n_distinct(df$draft_year), "\n")
+df |> count(draft_year, first_round) |>
+  pivot_wider(names_from = first_round, values_from = n, names_prefix = "fr_") |>
+  kable(caption = "Rows per draft year (fr_1 = first-rounders)")
+```
+
+## Preprocessing
+
+Missing values: median-impute and add a `_missing` flag. Then z-score each stat
+**within its draft year** so the model isn't confused by era shifts in pace and
+3-point volume.
+
+```{r preprocess}
+flag_cols <- character()
+for (f in features) {
+  if (anyNA(df[[f]])) {
+    flag <- paste0(f, "_missing")
+    df[[flag]] <- as.integer(is.na(df[[f]]))
+    df[[f]]    <- ifelse(is.na(df[[f]]), median(df[[f]], na.rm = TRUE), df[[f]])
+    flag_cols  <- c(flag_cols, flag)
+  }
+}
+
+# Stats that mostly reflect position (a center blocks 5x more shots than a guard).
+# These are standardized within position x season, so they read "good at this
+# FOR YOUR POSITION". Everything else is standardized within season only.
+pos_relative_features <- c("blk_per", "stl_per", "ORB_per", "DRB_per", "treb_per40",
+                           "AST_per", "ast_tov", "ast_per40", "TPA_rate", "TP_per_shrunk",
+                           "TPA_per40", "rim_rate", "dunks_per40", "height_in")
+zs <- function(x) { s <- sd(x, na.rm = TRUE); if (is.na(s) || s == 0) 0 * x else (x - mean(x, na.rm = TRUE)) / s }
+
+if (params$season_z) {
+  z_feats   <- setdiff(features, binary_features)
+  z_pos     <- intersect(z_feats, pos_relative_features)
+  z_season  <- setdiff(z_feats, z_pos)
+  df <- df |> mutate(position = ifelse(is.na(position), "unknown", position))
+  df <- df |> group_by(draft_year) |> mutate(across(all_of(z_season), zs)) |> ungroup()
+  if (length(z_pos))
+    df <- df |> group_by(draft_year, position) |> mutate(across(all_of(z_pos), zs)) |> ungroup()
+  cat("Standardized within position x season:", paste(z_pos, collapse = ", "), "\n")
+}
+x_cols <- c(features, flag_cols)
+# Drop anything constant (glm would return NA for it)
+const <- x_cols[sapply(df[x_cols], function(v) sd(v, na.rm = TRUE) == 0 | all(is.na(v)))]
+if (length(const)) { cat("Dropping constant features:", paste(const, collapse = ", "), "\n"); x_cols <- setdiff(x_cols, const) }
+cat("Features:", paste(x_cols, collapse = ", "), "\n")
+```
+
+## Helper: metrics
+
+```{r metrics}
+pr_auc <- function(y, p) {           # average precision
+  o <- order(-p); y <- y[o]
+  tp <- cumsum(y); prec <- tp / seq_along(y)
+  sum(prec * y) / max(sum(y), 1)
+}
+roc_auc <- function(y, p) {
+  if (length(unique(y)) < 2) return(NA_real_)
+  r <- rank(p); n1 <- sum(y == 1); n0 <- sum(y == 0)
+  (sum(r[y == 1]) - n1 * (n1 + 1) / 2) / (n1 * n0)
+}
+log_loss <- function(y, p, eps = 1e-15) {
+  p <- pmin(pmax(p, eps), 1 - eps); -mean(y * log(p) + (1 - y) * log(1 - p))
+}
+```
+
+## Leave-one-draft-out logistic regression
+
+Class imbalance is handled with weights (positives up-weighted so both classes
+sum to the same total). The model is plain `glm`; regularized alternatives
+(`glmnet`) are a natural next step.
+
+```{r model-functions}
+fit_weighted_glm <- function(train, x_cols) {
+  y <- train$first_round
+  w <- ifelse(y == 1, 0.5 / mean(y == 1), 0.5 / mean(y == 0))   # "balanced" weights
+  form <- as.formula(paste("first_round ~", paste(x_cols, collapse = " + ")))
+  suppressWarnings(glm(form, data = train, family = binomial(), weights = w))
+}
+
+# Leave-one-draft-out: returns per-year metrics and out-of-sample predictions
+run_lodo <- function(df, x_cols) {
+  preds <- rep(NA_real_, nrow(df)); per_year <- list()
+  for (yr in sort(unique(df$draft_year))) {
+    tr <- df |> filter(draft_year != yr); te_idx <- which(df$draft_year == yr)
+    mu <- sapply(tr[x_cols], mean); sdv <- sapply(tr[x_cols], sd); sdv[sdv == 0 | is.na(sdv)] <- 1
+    scale_df <- function(d) { d[x_cols] <- sweep(sweep(d[x_cols], 2, mu), 2, sdv, "/"); d }
+    m <- fit_weighted_glm(scale_df(tr), x_cols)
+    p <- predict(m, newdata = scale_df(df[te_idx, ]), type = "response")
+    preds[te_idx] <- p
+    y <- df$first_round[te_idx]; n_fr <- sum(y)
+    if (n_fr == 0) next
+    hits <- sum(y[order(-p)][seq_len(n_fr)])
+    per_year[[as.character(yr)]] <- tibble(
+      draft_year = yr, n_rows = length(te_idx), n_first_round = n_fr,
+      pr_auc = pr_auc(y, p), roc_auc = roc_auc(y, p), log_loss = log_loss(y, p),
+      top_n_hits = hits, top_n_precision = hits / n_fr)
+  }
+  list(per_year = bind_rows(per_year), preds = preds)
+}
+
+# Standardized coefficients from a fit on all years
+full_coefs <- function(df, x_cols) {
+  mu <- sapply(df[x_cols], mean); sdv <- sapply(df[x_cols], sd); sdv[sdv == 0 | is.na(sdv)] <- 1
+  d <- df; d[x_cols] <- sweep(sweep(d[x_cols], 2, mu), 2, sdv, "/")
+  m <- fit_weighted_glm(d, x_cols)
+  tibble(feature = names(coef(m)), coef = coef(m)) |> filter(feature != "(Intercept)", !is.na(coef)) |>
+    arrange(desc(coef))
+}
+
+overall_table <- function(df, res) {
+  y <- df$first_round; p <- res$preds
+  tibble(metric = c("PR-AUC", "baseline PR-AUC (positive rate)", "ROC-AUC", "log loss", "top-n precision (mean over drafts)"),
+         value  = c(pr_auc(y, p), mean(y), roc_auc(y, p), log_loss(y, p), mean(res$per_year$top_n_precision)))
+}
+```
+
+### Pass 1: all features
+
+```{r pass1}
+res1   <- run_lodo(df, x_cols)
+coefs1 <- full_coefs(df, x_cols)
+kable(overall_table(df, res1), digits = 3, caption = "Pass 1 — overall")
+kable(coefs1, digits = 3, caption = "Pass 1 — standardized coefficients")
+```
+
+### Pass 2: drop the 3 weakest features
+
+Backward elimination, one step: remove the three features with the smallest
+absolute standardized coefficient (missing-value flags are not candidates), refit.
+This is the final model.
+
+```{r pass2}
+n_drop <- 3
+candidates <- coefs1 |> filter(!str_detect(feature, "_missing$")) |> arrange(abs(coef))
+dropped <- head(candidates$feature, n_drop)
+cat("Dropped:", paste(sprintf("%s (%.3f)", dropped, candidates$coef[seq_len(n_drop)]), collapse = ", "), "\n")
+
+x_final <- setdiff(x_cols, dropped)
+res   <- run_lodo(df, x_final)
+coefs <- full_coefs(df, x_final)
+per_year <- res$per_year
+df$p_first_round <- res$preds
+
+kable(per_year, digits = 3, caption = "Final model — per-draft results (leave-one-draft-out)")
+kable(overall_table(df, res), digits = 3, caption = "Final model — overall")
+```
+
+### Position check: is the model over-picking bigs?
+
+For each draft class, take the model's top-n (n = number of real first-rounders
+that year) and compare its position mix with the real first round. If the
+"model top-n" share for bigs is well above the "actual" share, the model is
+over-paying for size.
+
+```{r position-check}
+pos_check <- df |> group_by(draft_year) |>
+  mutate(n_fr = sum(first_round), in_model_topn = rank(-p_first_round, ties.method = "first") <= n_fr) |>
+  ungroup() |>
+  group_by(position) |>
+  summarise(pool_share       = n() / nrow(df),
+            actual_1st_round = sum(first_round),
+            model_topn       = sum(in_model_topn),
+            hits_in_topn     = sum(in_model_topn & first_round == 1), .groups = "drop") |>
+  mutate(actual_share = actual_1st_round / sum(actual_1st_round),
+         model_share  = model_topn / sum(model_topn),
+         precision    = hits_in_topn / model_topn) |>
+  select(position, pool_share, actual_1st_round, actual_share, model_topn, model_share, precision)
+kable(pos_check, digits = 3, caption = "Position mix: pool vs. actual first round vs. model's top-n")
+```
+
+```{r plot-per-year, fig.height=3.5}
+ggplot(per_year, aes(draft_year, top_n_precision)) +
+  geom_col(fill = "steelblue") + ylim(0, 1) +
+  labs(title = "Share of real first-rounders found in the model's top-n, by draft",
+       x = NULL, y = "top-n precision") + theme_minimal()
+```
+
+## Coefficients (final model)
+
+Signs to check: `class_num` and `recruit_rank` negative (younger / higher-ranked
+recruits = more valuable), `obpm`, `height_vs_pos`, `usg` positive. If they're
+wrong, it's almost always a join problem — look at `match_report.txt` first.
+
+Remember these are *conditional* effects: a negative coefficient on, say,
+`ORB_per` means "given height and position, extra offensive rebounding doesn't
+add first-round value", not that rebounding is bad.
+
+On height: the model uses `height_vs_pos` (height relative to the position
+average) rather than raw height, so "tall" means tall *for a guard* or tall
+*for a big*. If height still dominates, check the "Non-first-rounders the model
+liked most" table below: if it's full of 7-footers with weak stats, the model is
+over-paying for size and a position × height interaction or a cap is the next step.
+
+```{r coef}
+kable(coefs, digits = 3, caption = "Standardized coefficients (+ = more likely first round)")
+
+ggplot(coefs, aes(reorder(feature, coef), coef, fill = coef > 0)) +
+  geom_col(show.legend = FALSE) + coord_flip() +
+  labs(x = NULL, y = "coefficient", title = "Logistic regression coefficients (final model)") + theme_minimal()
+```
+
+## Biggest disagreements with the draft
+
+```{r misses}
+df <- df |> group_by(draft_year) |>
+  mutate(rank_in_class = rank(-p_first_round, ties.method = "first")) |> ungroup()
+df <- df |> mutate(pick = ifelse(is.na(pick_number), "Undrafted", as.character(pick_number)))
+show <- c("draft_year", "player_name", "school", "position", "ht", "class_year", "pick", "p_first_round", "rank_in_class")
+show <- intersect(show, names(df))
+
+df |> filter(first_round == 1) |> arrange(p_first_round) |> head(15) |> select(all_of(show)) |>
+  kable(digits = 3, caption = "First-rounders the model liked least")
+df |> filter(first_round == 0) |> arrange(desc(p_first_round)) |> head(15) |> select(all_of(show)) |>
+  kable(digits = 3, caption = "Non-first-rounders the model liked most")
+```
+
+## Save results
+
+```{r save}
+write_csv(per_year, file.path(params$results_dir, "logreg_per_year.csv"))
+write_csv(coefs,    file.path(params$results_dir, "logreg_coefficients.csv"))
+df |> mutate(pick_number = ifelse(is.na(pick_number), "Undrafted", as.character(pick_number))) |>
+  select(pid, player_name, school, position, ht, draft_year, class_year, first_round, pick_number, p_first_round, rank_in_class) |>
+  write_csv(file.path(params$results_dir, "logreg_predictions.csv"))
+```
+
+## For the other four models
+
+Reuse this exact loop: same `players.csv`, same leave-one-draft-out split, same
+metrics. Swap `fit_weighted_glm` for `class::knn`, `nnet::nnet`,
+`randomForest::randomForest`, or `xgboost::xgboost`. KNN and the ANN need the
+scaling; the tree models don't (and xgboost takes NAs directly, so the
+imputation step can be skipped for it).
